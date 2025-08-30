@@ -41,3 +41,62 @@ gcloud services enable \
   logging.googleapis.com \
   bigquery.googleapis.com \
   storage.googleapis.com
+```
+
+2. Run the BigQuery Setup Commands: After the APIs are enabled,the guide tells you to run these next to create your dataset and table.
+
+```bash
+bq mk --dataset \
+  --location=US \
+  $GOOGLE_CLOUD_PROJECT:csv_ingestion
+```
+
+```bash
+bq mk --table \
+  csv_ingestion.user_data \
+  name:STRING,age:INTEGER,city:STRING
+```
+
+Note: $GOOGLE_CLOUD_PROJECT is an environment variable. You can replace it with your actual Project ID if it's not set.
+
+3. Run the GCS Bucket Creation Command: Then,you create the bucket that will trigger the function.
+
+```bash
+gsutil mb -l US gs://$YOUR_BUCKET_NAME
+```
+
+Note: You must replace $YOUR_BUCKET_NAME with a unique name, e.g., my-unique-bucket-name-123.
+
+4. Create the Python Files and Deploy the Function
+
+```bash
+gcloud functions deploy csv-to-bigquery-loader \
+    --gen2 \
+    --runtime=python311 \
+    --region=us-central1 \
+    --source=. \
+    --entry-point=csv_to_bigquery \
+    --trigger-event-filters="type=google.cloud.storage.object.v1.finalized" \
+    --trigger-event-filters="bucket=$YOUR_BUCKET_NAME" \
+    --service-account=$(gcloud config get-value account)
+```
+5. Test the Pipeline
+
+1. Create a test CSV file (test_data.csv):
+   ```csv
+   name,age,city
+   Alice,30,Seattle
+   Bob,25,New York
+   Charlie,35,Austin
+   ```
+2. Upload the file to your trigger bucket:
+   ```bash
+   gsutil cp test_data.csv gs://$YOUR_BUCKET_NAME/
+   ```
+3. Verify the results:
+   · Check the Cloud Function Logs in the GCP Console.
+   · Query BigQuery to see your data:
+     ```bash
+     bq query --use_legacy_sql=false \
+     "SELECT * FROM \`$GOOGLE_CLOUD_PROJECT.csv_ingestion.user_data\`"
+     ```
